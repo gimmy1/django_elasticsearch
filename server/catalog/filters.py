@@ -1,4 +1,5 @@
-from django.db.models import Q
+from django.contrib.postgres.search import SearchQuery, SearchVector, SearchRank
+from django.db.models import F, Q
 
 from django_filters.rest_framework import CharFilter, FilterSet
 
@@ -9,11 +10,12 @@ class WineFilterSet(FilterSet):
 
     def filter_query(self, queryset, name, value):
         search_query = Q(
-            Q(variety__contains=value) |
-            Q(winery__contains=value) |
-            Q(description__contains=value)
+            Q(search_vector=SearchQuery(value))
         )
-        return queryset.filter(search_query)
+        return queryset.annotate(
+            search_rank=SearchRank(F('search_vector'), SearchQuery(value))
+        ).filter(search_query).order_by('-search_rank', 'id')
+
 
     class Meta:
         model = Wine

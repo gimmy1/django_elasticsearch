@@ -18,3 +18,9 @@ class WineSearchWordsView(ListAPIView):
     serializer_class = WineSearchWordSerializer
     filterset_class = WineSearchWordFilterSet
 
+
+# brew link --overwrite node
+
+# brew link --overwrite --dry-run node
+
+# brew postinstall node

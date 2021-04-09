@@ -1,7 +1,7 @@
 from django.contrib.postgres.search import SearchVector
 from rest_framework.test import APIClient, APITestCase
 
-from catalog.models import Wine
+from catalog.models import Wine, WineSearchWord
 from catalog.serializers import WineSerializer
 
 class ViewTests(APITestCase):
@@ -78,4 +78,40 @@ class ViewTests(APITestCase):
         )
         wine = Wine.objects.get(id=wine.id)
         self.assertEqual("'charl':3A 'grigio':2A 'pinot':1A 'shaw':4A", wine.search_vector)
+
+    def test_description_hightlights_matched_words(self):
+        response = self.client.get('/api/v1/catalog/wines/?query=wine')
+        self.assertEquals('A creamy <mark>wine</mark> with full Chardonnay flavors.', response.data[0]['description'])
+    
+    def test_wine_search_words_populated_on_save(self):
+        WineSearchWord.objects.all().delete()
+        Wine.objects.create(
+            country='US',
+            description='A cheap, but inoffensive wine.',
+            points=80,
+            price=1.99,
+            variety='Pinot Grigio',
+            winery='Charles Shaw'
+        )
+        wine_search_words = WineSearchWord.objects.all().order_by('word').values_list('word', flat=True)
+        self.assertListEqual([
+            'a',
+            'but',
+            'charles',
+            'cheap',
+            'inoffensive',
+            'shaw',
+            'wine'
+        ], list(wine_search_words))
+    
+    def test_suggests_words_for_spelling_mistakes(self):
+        WineSearchWord.objects.bulk_create([
+            WineSearchWord(word='pinot'),
+            WineSearchWord(word='grigio'),
+            WineSearchWord(word='noir'),
+            WineSearchWord(word='merlot'),
+        ])
+        response = self.client.get('/api/v1/catalog/wine-search-words/?query=greegio')
+        self.assertEqual(1, len(response.data))
+        self.assertEqual('grigio', response.data[0]['word'])
         

@@ -43,24 +43,60 @@ class ESWinesView(APIView):
                 Match(description={'query': query, 'boost': 1.0})
             ]
             q['minimum_should_match'] = 1
-        
-        # build filter clause
+
+            # Build highlighting.
+            search = search.highlight_options( # new
+                number_of_fragments=0,
+                pre_tags=['<mark>'],
+                post_tags=['</mark>']
+            )
+            search = search.highlight('variety', 'winery', 'description') # new
+
+        # Build filter clause.
         if country:
             q['filter'].append(Term(country=country))
         if points:
-            q['filter'].append(Term(country=country))
+            q['filter'].append(Term(points=points))
 
         response = search.query('bool', **q).params(size=100).execute()
-    
+
         if response.hits.total.value > 0:
-            return Response(data=[{
+            return Response(data=[{ # changed
                 'id': hit.meta.id,
                 'country': hit.country,
-                'description': hit.description,
+                'description': (
+                    hit.meta.highlight.description[0]
+                    if 'highlight' in hit.meta and 'description' in hit.meta.highlight
+                    else hit.description
+                ),
                 'points': hit.points,
                 'price': hit.price,
-                'variety': hit.variety,
-                'winery': hit.winery,
+                'variety': (
+                    hit.meta.highlight.variety[0]
+                    if 'highlight' in hit.meta and 'variety' in hit.meta.highlight
+                    else hit.variety
+                ),
+                'winery': (
+                    hit.meta.highlight.winery[0]
+                    if 'highlight' in hit.meta and 'winery' in hit.meta.highlight
+                    else hit.winery
+                ),
             } for hit in response])
         else:
             return Response(data=[])
+
+class ESWineSearchWordsView(APIView):
+    def get(self, request, *args, **kwargs):
+        query = self.request.query_params.get('query')
+
+        # Build Elasticsearch query.
+        search = Search().suggest('result', query, term={
+            'field': 'all_text'
+        })
+
+        response = search.execute()
+
+        options = response.suggest.result[0]['options']
+        words = [{'word': option['text']} for option in options]
+
+        return Response(data=words)
